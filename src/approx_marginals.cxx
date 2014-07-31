@@ -26,8 +26,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **/
 
 // #define MANY_ALGORITHMS
-// #define MAXPROD
 
+#include <math.h>
 #include "path_follower/approx_marginals.h"
 #include <dai/gibbs.h>
 
@@ -78,32 +78,29 @@ geometry_msgs::Pose ApproxMarginals::next_waypoint()
 
 
 /**
-   Calculates the variable with most uncertainty on its value, i.e. with a probability closer to \f$\frac{1}{C}\f$, where \f$C\f$ is the number of possible classes ("states").
+   Calculates the variable with most uncertainty on its value, i.e. the max of the enthropy \f$-\Sum_{i=1}^c P(x_i) ln P(x_i)\f$, where \f$c\f$ is the number of possible classes ("states").
    @return The variable with more uncertainty on its value.
 */
 size_t ApproxMarginals::most_uncertain_var()
 {
         float avg_dist= 1.0 / num_classes();
-        Real min_dist = 1.0;
-        size_t min_var = 0;
+        Real max_ent = 0.0;
+        size_t var = 0;
 
         for( size_t i = 0; i < fg().nrVars(); i++ ) // iterate over all variables in the factor graph
         {
-                Real dist = 0.0;
+                Real sum = 0.0;
                 Factor f = bp().belief(fg().var(i));
                 for (size_t j = 0; j < f.nrStates(); j++) 
-                        dist += abs( f[j] - avg_dist );
+                        sum -= ( f[j] * std::log(f[j]) );
 
-                if (dist < min_dist) {
-                        min_dist = dist;
-                        min_var = i;
+                if (sum > max_ent) {
+                        max_ent = sum;
+                        var = i;
                 }
-                // Report variable marginals for factor graph, calculated by the Gibbs sampler algorithm
-                // display the "belief" of gibbsSample for that variable
-                // std::cout << gibbsSampler.belief(fg().var(i)) << " - " << dist << std::endl; 
         } 
-        std::cout << "most uncertain var is {" << min_var << "}: " << min_dist << std::endl;
-        return min_var;
+        std::cout << "most uncertain var is {" << var << "}: " << max_ent << std::endl;
+        return var;
 }
 
 
@@ -154,31 +151,6 @@ BP ApproxMarginals::loopy_belief_propagation(FactorGraph &fg)
         cout << bp.maxDiff() << " max diff" << endl;
         cout << bp.name() << " name" << endl;
         
-
-#ifdef MAXPROD
-// Note that inference is set to MAXPROD, which means that the object
-// will perform the max-product algorithm instead of the sum-product algorithm
-        BP mp( fg, opts("updates",string("SEQRND"))("logdomain",false)("inference",string("MAXPROD"))("damping",string("0.1")));
-// Initialize max-product algorithm
-        mp.init();
-// Run max-product algorithm
-        mp.run();
-// Calculate joint state of all variables that has maximum probability
-// based on the max-product result
-        vector<size_t> mpstate = mp.findMaximum();
-
-// Report max-product variable marginals
-        cout << "Approximate (max-product) MAP variable marginals:" << endl;
-        for( size_t i = 0; i < network.nrVars(); i++ )
-                cout << mp.belief(network.var(i)) << endl;
-
-// Report max-product factor marginals
-        cout << "Approximate (max-product) MAP factor marginals:" << endl;
-        for( size_t j = 0; j < network.nrFactors(); ++j )
-                cout << mp.beliefF(j) << endl;
-#endif
-
-
         /** Code to perform updates **/
         //  bp.fg().clamp(1,1);
         //  bp.init();
@@ -197,6 +169,37 @@ BP ApproxMarginals::loopy_belief_propagation(FactorGraph &fg)
 #endif
 
         return bp;
+}
+
+/** Prints the joint state of all variables that has maximum probability. 
+    @see BP::findMaximum()
+*/
+void ApproxMarginals::print_max_state()
+{
+
+// Open a .tab file for writing
+        std::ofstream outfile;
+        outfile.open( "map_results.tab" );
+        if( !outfile.is_open() )
+                throw "Cannot write to file!";
+// Write header (consisting of variable labels)
+        for( size_t i = 0; i < fg().nrVars(); i++ ) {
+                outfile <<  "\t" << fg().var(i).label();
+                if ((i > 0) && !((i+1)%coord.col)) 
+                        outfile << std::endl;
+        }
+        outfile << std::endl << std::endl;
+
+        std::vector<std::size_t> max_state = bp().findMaximum();
+        for( size_t i = 0; i < max_state.size(); i++ ) {
+                outfile << ((i == 0 || !((i)% coord.col) ) ? "" : "\t") << max_state[i];
+                
+                if ((i > 0) && !((i+1)%coord.col)) 
+                        outfile << std::endl;
+        }
+        outfile << std::endl;
+        outfile.close();
+        std::cout << "Final max state written in map_results.tab" << std::endl;
 }
 
 

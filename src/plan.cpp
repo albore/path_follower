@@ -260,7 +260,8 @@ int adaptive_sampling(ApproxMarginals& a, ros::Publisher &motion, ros::Rate& loo
                 // Finishing the path
                 if (a.quality() >= min_quality) //AA: and max_time?
                 {
-                        a.print_Gibbs_sample(1000);
+                        // a.print_Gibbs_sample(1000);
+                        a.print_max_state();
                         ROS_INFO("Moving toward: (%g, %g, %g)", 
                                  g_initial_pose.position.x, g_initial_pose.position.y, g_initial_pose.position.z);
                         motion.publish(g_initial_pose);

@@ -24,7 +24,8 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **/
 
-// #define MANY_ALGORITHMS
+#ifndef PATH_FOLLOWER_APPROX_MARGINALS_H
+#define PATH_FOLLOWER_APPROX_MARGINALS_H
 
 #include <dai/alldai.h> // Include main libDAI header file
 #include <dai/evidence.h>
@@ -44,6 +45,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "std_msgs/String.h"
 #include "geometry_msgs/Pose.h"
 
+// #define MANY_ALGORITHMS
 
 using namespace std;
 using namespace dai;
@@ -100,8 +102,11 @@ public:
         Real quality();
         BP loopy_belief_propagation(FactorGraph &fg);
         void print_Gibbs_sample(size_t n);
+        void print_max_state();
 
 protected:
         size_t most_uncertain_var();
         void print_Gibbs_state(std::vector<size_t> &s,  std::ofstream &outfile);
 };
+
+#endif // PATH_FOLLOWER_APPROX_MARGINALS_H
