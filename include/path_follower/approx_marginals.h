@@ -24,6 +24,8 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **/
+#ifndef PATH_FOLLOWER_APPROX_MARGINALS_H
+#define PATH_FOLLOWER_APPROX_MARGINALS_H
 
 //#include <dai/alldai.h>
 #include <dai/evidence.h>
@@ -104,3 +106,4 @@ protected:
         size_t most_uncertain_var();
         void print_state(std::vector<size_t> &s,  std::ofstream &outfile);
 };
+#endif // PATH_FOLLOWER_APPROX_MARGINALS_H
