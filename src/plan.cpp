@@ -23,6 +23,8 @@ geometry_msgs::Pose g_initial_pose;
 message_filters::Cache<geometry_msgs::PoseStamped> g_pose_cache(BUFFER);
 message_filters::Cache<path_follower::SemCamera> g_camera_cache(BUFFER);
 path_follower::SemCamera g_camera;
+std::vector<geometry_msgs::Point> g_path;
+
 static const int min_quality = 138; // max 425 
 
 /** Counts the number of occurences of a substring in a string.
@@ -92,8 +94,6 @@ void cameraCallback(const std_msgs::String& msg)
 
 geometry_msgs::Pose* get_pose(std::string s)
 {
-
-        //        
         std::vector<double>position;
         std::string delimiter = ",";
         size_t pos = 0;
@@ -213,13 +213,7 @@ int adaptive_sampling(ApproxMarginals& a, ros::Publisher &motion, ros::Rate& loo
         ROS_INFO("Ready");
 
         while (ros::ok())
-        {
-                /* AA
-                 * here 1. gets the observation
-                 * 2. updates the FG
-                 * 3. gets the next waypoint and sets msg=next_waypoint()
-                 */
-                
+        {      
                 // AA: Here can initialize the FG with some samplings taken from file or from movements arount the initial position.
 
                 //        ROS_INFO("%s", msg.data.c_str());
@@ -241,6 +235,7 @@ int adaptive_sampling(ApproxMarginals& a, ros::Publisher &motion, ros::Rate& loo
 
                 ROS_INFO("Reached position: (%g, %g, %g)", msg.position.x, msg.position.y, msg.position.z, count);
                 ++count;
+                g_path.push_back(msg.position);
                 ros::spinOnce();
                 loop_rate.sleep();
 
@@ -301,12 +296,7 @@ int adaptive_sampling_simulation(ApproxMarginals& a, ros::Rate& loop_rate, ros::
 
         while (ros::ok())
         {
-                /* AA
-                 * here 1. gets the observation
-                 * 2. updates the FG
-                 * 3. gets the next waypoint and sets msg=next_waypoint()
-                 */
-                
+               
                 // AA: Here can initialize the FG with some samplings taken from file or from movements arount the initial position.
 
                 //        ROS_INFO("%s", msg.data.c_str());
@@ -319,7 +309,8 @@ int adaptive_sampling_simulation(ApproxMarginals& a, ros::Rate& loop_rate, ros::
                  */
 
                 ROS_INFO("From position: (%g, %g, %g)", msg.position.x, msg.position.y, msg.position.z, count);
-                ++count;
+                ++count;   
+                g_path.push_back(msg.position);
                 ros::spinOnce();
                 loop_rate.sleep();
 
@@ -422,6 +413,19 @@ int follow_waypoints(std::vector<geometry_msgs::Pose> &path, ros::Publisher &mot
         return count;
 }
 
+
+/* Prints in std output the visited points. */
+void print_plan()
+{
+        std::cout << "Executed plan:\n [ ";
+        for( std::vector<geometry_msgs::Point>::const_iterator i = g_path.begin(); i != g_path.end(); ++i)
+        {
+                std::cout << "(" << (*i).x << ", " << (*i).y  << ", " << (*i).z << ")";
+                if (i+1 != g_path.end())
+                        std::cout << "; ";
+        }
+        std::cout << " ]" << std::endl;
+}
 
 
 int main(int argc, char **argv)
@@ -555,6 +559,7 @@ int main(int argc, char **argv)
         }
 
         ROS_INFO("Algorithm terminated after %d steps.\n\n", steps); 
+        print_plan();
 
      return 0;
  }

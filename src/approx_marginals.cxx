@@ -100,7 +100,7 @@ size_t ApproxMarginals::most_uncertain_var()
                         var = i;
                 }
         } 
-        std::cout << "most uncertain var is {" << var << "}: " << min_ent << std::endl;
+        std::cout << "most uncertain var is {" << var << "}: " << max_ent << std::endl;
         return var;
 }
 
@@ -260,9 +260,7 @@ void ApproxMarginals::print_max_state()
                         if  (higher_value == f[j])
                         {
                                 state.push_back(j);
-                                cout << "p: " <<   higher_value << ", v: " << j << endl;         
-                       break;
-         
+                                break;       
                         } 
         }
         outfile << std::endl << std::endl;
@@ -271,10 +269,6 @@ void ApproxMarginals::print_max_state()
         outfile << std::endl;
         outfile.close();
         std::cout << " output written to map_results.tab" << std::endl;
-
-   cout << "Approximate (loopy belief propagation) variable marginals:" << endl;
-   for( size_t i = 0; i < bp().fg().nrVars(); i++ ) // iterate over all variables in network
-           cout << bp().belief( bp().fg().var(i)) << endl; // display the belief of bp for that variable
 }
 
 
