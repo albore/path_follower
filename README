@@ -1,7 +1,7 @@
 path_node by A.Albore 2014
 
 to compile:
-catkin_make_isolated --pkg path_follower
+catkin_make --pkg path_follower
 
 to use (no install): 
 cp  /home/aalbore/catkin_ws/devel/lib/path_follower/path_node  /home/aalbore/catkin_ws/src/path_follower/
@@ -12,3 +12,4 @@ catkin_make install --pkg path_follower
 
 NB: The waypoints are comma separated, from the 1st to the last.
 e.g. -1,0.002,3.21,
+

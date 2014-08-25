@@ -2,7 +2,8 @@
  *  Copyright (c) A.Albore 2014 - derived from libDAI.                      
  *  Copyright (c) 2006-2011, the libDAI authors.  All rights reserved.
  *  Use of this source code is governed by a BSD-style license as follows:
-
+ @author Alexandre Albore
+ @version 1.0
  * Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
 
@@ -24,35 +25,31 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **/
 
-#ifndef PATH_FOLLOWER_APPROX_MARGINALS_H
-#define PATH_FOLLOWER_APPROX_MARGINALS_H
-
-#include <dai/alldai.h> // Include main libDAI header file
+//#include <dai/alldai.h>
 #include <dai/evidence.h>
 #include <dai/daialg.h>
 #include <dai/factorgraph.h>
 #include <dai/treeep.h>
 #include <dai/properties.h>
 #include <dai/bp.h>
+
 #include <iostream>
-#include <map>
-
-#include <dai/jtree.h>
-
 #include <fstream>
 
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include "geometry_msgs/Pose.h"
 
-// #define MANY_ALGORITHMS
-
 using namespace std;
 using namespace dai;
+
 
 const Real tol = 1e-9;
 const size_t max_iterations = 10000;
 
+/** 
+    Struct to hold the coordinates of the map.
+ */
 typedef struct MapCoordinates {
         const int xoff;
         const int yoff;
@@ -76,7 +73,7 @@ typedef struct MapCoordinates {
                 geometry_msgs::Pose p;
                 p.position.x = var%col*3-xoff;
                 p.position.y = var/col*3-yoff;
-                p.position.z = 4; // Safe value.
+                p.position.z = 4.9; // Safe value. 9m2 at f:50mm
 
                 return p;
         }
@@ -92,21 +89,18 @@ public:
         ApproxMarginals(FactorGraph &network);
         ApproxMarginals(FactorGraph &network, int nc);
 
-        void set_num_classes(const int c) { _num_classes = c; }
-        int num_classes() { return _num_classes; }
-        BP& bp() { return _bp;}
-        FactorGraph& fg() { return _bp.fg();}
-
         void evidence(geometry_msgs::Pose p, int o);
         geometry_msgs::Pose next_waypoint();
         Real quality();
-        BP loopy_belief_propagation(FactorGraph &fg);
-        void print_Gibbs_sample(size_t n);
+        void set_num_classes(const int c) { _num_classes = c; }
+        int num_classes() { return _num_classes; }
         void print_max_state();
+        void print_Gibbs_sample(size_t n);
+        FactorGraph& fg() { return _bp.fg();}
+        BP& bp() { return _bp; } //NB: to change when using different algos
 
 protected:
+        BP loopy_belief_propagation(FactorGraph &fg);
         size_t most_uncertain_var();
-        void print_Gibbs_state(std::vector<size_t> &s,  std::ofstream &outfile);
+        void print_state(std::vector<size_t> &s,  std::ofstream &outfile);
 };
-
-#endif // PATH_FOLLOWER_APPROX_MARGINALS_H

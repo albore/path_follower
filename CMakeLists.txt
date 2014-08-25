@@ -97,12 +97,12 @@ catkin_package(
 ## Your package locations should be listed before other locations
 # include_directories(include)
 include_directories( 
-${catkin_INCLUDE_DIRS} include
+include ${catkin_INCLUDE_DIRS}
 )
 
 ## Declare a cpp library
-add_library( #path_follower
-approx_marginals src/approx_marginals.cxx   
+add_library(path_follower
+  src/approx_marginals.cxx
 #src/${PROJECT_NAME}/path_follower.cpp
 )
 
@@ -115,7 +115,7 @@ add_dependencies(plan_node path_follower_generate_messages_cpp)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(plan_node
-   ${catkin_LIBRARIES} approx_marginals dai gmpxx gmp
+   ${catkin_LIBRARIES} path_follower dai gmpxx gmp 
  )
 
 #############

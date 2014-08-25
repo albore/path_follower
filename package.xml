@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package>
   <name>path_follower</name>
-  <version>0.0.0</version>
+  <version>1.0.1</version>
   <description>Publishes a path to follow, package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 
@@ -40,7 +40,8 @@
   <!-- Use test_depend for packages you need only for testing: -->
   <!--   <test_depend>gtest</test_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>geometry_msgs</build_depend>
+  <build_depend>geometry_msgs</build_depend>  
+  <build_depend>data_reader</build_depend>
   <build_depend>roscpp</build_depend>
   <build_depend>rospy</build_depend>  
   <build_depend>message_filters</build_depend>
@@ -49,6 +50,7 @@
   <run_depend>roscpp</run_depend>
   <run_depend>rospy</run_depend>
   <run_depend>std_msgs</run_depend>
+  <run_depend>data_reader</run_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

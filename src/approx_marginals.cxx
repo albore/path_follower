@@ -26,8 +26,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **/
 
 // #define MANY_ALGORITHMS
+// #define MAXPROD
 
-#include <math.h>
 #include "path_follower/approx_marginals.h"
 #include <dai/gibbs.h>
 
@@ -78,29 +78,32 @@ geometry_msgs::Pose ApproxMarginals::next_waypoint()
 
 
 /**
-   Calculates the variable with most uncertainty on its value, i.e. the max of the enthropy \f$-\Sum_{i=1}^c P(x_i) ln P(x_i)\f$, where \f$c\f$ is the number of possible classes ("states").
+   Calculates the variable with most uncertainty on its value, i.e. with a probability closer to \f$\frac{1}{C}\f$, where \f$C\f$ is the number of possible classes ("states").
    @return The variable with more uncertainty on its value.
 */
 size_t ApproxMarginals::most_uncertain_var()
 {
         float avg_dist= 1.0 / num_classes();
-        Real max_ent = 0.0;
-        size_t var = 0;
+        Real min_dist = 1.0;
+        size_t min_var = 0;
 
         for( size_t i = 0; i < fg().nrVars(); i++ ) // iterate over all variables in the factor graph
         {
-                Real sum = 0.0;
+                Real dist = 0.0;
                 Factor f = bp().belief(fg().var(i));
                 for (size_t j = 0; j < f.nrStates(); j++) 
-                        sum -= ( f[j] * std::log(f[j]) );
+                        dist += abs( f[j] - avg_dist );
 
-                if (sum > max_ent) {
-                        max_ent = sum;
-                        var = i;
+                if (dist < min_dist) {
+                        min_dist = dist;
+                        min_var = i;
                 }
+                // Report variable marginals for factor graph, calculated by the Gibbs sampler algorithm
+                // display the "belief" of gibbsSample for that variable
+                // std::cout << gibbsSampler.belief(fg().var(i)) << " - " << dist << std::endl; 
         } 
-        std::cout << "most uncertain var is {" << var << "}: " << max_ent << std::endl;
-        return var;
+        std::cout << "most uncertain var is {" << min_var << "}: " << min_dist << std::endl;
+        return min_var;
 }
 
 
@@ -113,12 +116,8 @@ Real ApproxMarginals::quality()
         Real sum = 0.0;
         for( size_t i = 0; i < fg().nrVars(); ++i ) // iterate over all variables in network
         {
-                Real higher_value = 0.0;
                 Factor f = bp().belief( fg().var(i));
-                for (size_t j = 0; j < f.nrStates(); j++) 
-                        if  (higher_value < f[j])
-                                higher_value = f[j];
-                sum +=  higher_value;
+                sum +=  f.max();
         }
         return sum;
 }
@@ -151,11 +150,37 @@ BP ApproxMarginals::loopy_belief_propagation(FactorGraph &fg)
         cout << bp.maxDiff() << " max diff" << endl;
         cout << bp.name() << " name" << endl;
         
+
+#ifdef MAXPROD
+// Note that inference is set to MAXPROD, which means that the object
+// will perform the max-product algorithm instead of the sum-product algorithm
+        BP mp( fg, opts("updates",string("SEQRND"))("logdomain",false)("inference",string("MAXPROD"))("damping",string("0.1")));
+// Initialize max-product algorithm
+        mp.init();
+// Run max-product algorithm
+        mp.run();
+// Calculate joint state of all variables that has maximum probability
+// based on the max-product result
+        vector<size_t> mpstate = mp.findMaximum();
+
+// Report max-product variable marginals
+        cout << "Approximate (max-product) MAP variable marginals:" << endl;
+        for( size_t i = 0; i < network.nrVars(); i++ )
+                cout << mp.belief(network.var(i)) << endl;
+
+// Report max-product factor marginals
+        cout << "Approximate (max-product) MAP factor marginals:" << endl;
+        for( size_t j = 0; j < network.nrFactors(); ++j )
+                cout << mp.beliefF(j) << endl;
+#endif
+
+
         /** Code to perform updates **/
         //  bp.fg().clamp(1,1);
         //  bp.init();
         // // Run belief propagation algorithm
         // bp.run();
+
 #ifdef DEBUG
 // Report variable marginals for network, calculated by the belief propagation algorithm
         cout << "Approximate (loopy belief propagation) variable marginals:" << endl;
@@ -166,40 +191,10 @@ BP ApproxMarginals::loopy_belief_propagation(FactorGraph &fg)
         cout << "Approximate (loopy belief propagation) factor marginals:" << endl;
         for( size_t i = 0; i < bp.fg().nrFactors(); ++i ) // iterate over all factors in network
                 cout << bp.belief(bp.fg().factor(i).vars()) << endl; // display the belief of bp for the variables in that factor
+
 #endif
 
         return bp;
-}
-
-/** Prints the joint state of all variables that has maximum probability. 
-    @see BP::findMaximum()
-*/
-void ApproxMarginals::print_max_state()
-{
-
-// Open a .tab file for writing
-        std::ofstream outfile;
-        outfile.open( "map_results.tab" );
-        if( !outfile.is_open() )
-                throw "Cannot write to file!";
-// Write header (consisting of variable labels)
-        for( size_t i = 0; i < fg().nrVars(); i++ ) {
-                outfile <<  "\t" << fg().var(i).label();
-                if ((i > 0) && !((i+1)%coord.col)) 
-                        outfile << std::endl;
-        }
-        outfile << std::endl << std::endl;
-
-        std::vector<std::size_t> max_state = bp().findMaximum();
-        for( size_t i = 0; i < max_state.size(); i++ ) {
-                outfile << ((i == 0 || !((i)% coord.col) ) ? "" : "\t") << max_state[i];
-                
-                if ((i > 0) && !((i+1)%coord.col)) 
-                        outfile << std::endl;
-        }
-        outfile << std::endl;
-        outfile.close();
-        std::cout << "Final max state written in map_results.tab" << std::endl;
 }
 
 
@@ -208,7 +203,7 @@ void ApproxMarginals::print_max_state()
    @param s The state in the Markov field.
    @param outfile The output stream.
 */
-void ApproxMarginals::print_Gibbs_state(std::vector<size_t> &s,  std::ofstream &outfile)
+void ApproxMarginals::print_state(std::vector<size_t> &s,  std::ofstream &outfile)
 {
         for( size_t i = 0; i < s.size(); i++ ) {
                 outfile << ((i == 0 || !((i)% coord.col) ) ? "" : "\t") << s[i];
@@ -251,15 +246,61 @@ void ApproxMarginals::print_Gibbs_sample(size_t nrIterations)
 // Draw samples from joint distribution using Gibbs sampling
 // and write them to the .tab file
         gibbsSampler.randomizeState();
-        std::vector<size_t> state;
         for( size_t t = 0; t < nrSamples; t++ ) {
                 gibbsSampler.init(); 
                 gibbsSampler.run();
-                print_Gibbs_state( gibbsSampler.state(), outfile );
+                print_state( gibbsSampler.state(), outfile );
         } 
         outfile << std::endl;
         outfile.close();
         std::cout << nrSamples << " samples written to map_results.tab" << std::endl;
+}
+
+
+/** Outputs the state made of the maximum value assumed by each variable. */
+void ApproxMarginals::print_max_state()
+{
+ 
+// Open a .tab file for writing
+        std::ofstream outfile;
+        outfile.open( "map_results.tab" );
+        if( !outfile.is_open() )
+                throw "Cannot write to file!";
+// Write header (consisting of variable labels)
+        for( size_t i = 0; i < fg().nrVars(); i++ ) {
+                outfile <<  "\t" << fg().var(i).label();
+                if ((i > 0) && !((i+1)%coord.col)) 
+                        outfile << std::endl;
+        }
+        outfile << std::endl << std::endl;
+
+
+// Draw max state from the factorgraph
+// and write them to the .tab file
+        std::vector<size_t> state;
+        for( size_t i = 0; i < fg().nrVars(); ++i ) {
+                Factor f = bp().belief( fg().var(i));
+                Real higher_value = f.max();
+                // gets the max index
+                for (size_t j = 0; j < f.nrStates(); j++) 
+                        if  (higher_value == f[j])
+                        {
+                                state.push_back(j);
+                                cout << "p: " <<   higher_value << ", v: " << j << endl;         
+                       break;
+         
+                        } 
+        }
+        outfile << std::endl << std::endl;
+        print_state( state, outfile );
+
+        outfile << std::endl;
+        outfile.close();
+        std::cout << " output written to map_results.tab" << std::endl;
+
+   cout << "Approximate (loopy belief propagation) variable marginals:" << endl;
+   for( size_t i = 0; i < bp().fg().nrVars(); i++ ) // iterate over all variables in network
+           cout << bp().belief( bp().fg().var(i)) << endl; // display the belief of bp for that variable
 }
 
 

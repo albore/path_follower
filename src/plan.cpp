@@ -1,28 +1,29 @@
 #include "ros/ros.h"
+#include "ros/time.h"
 #include "std_msgs/String.h"
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/PoseStamped.h"
 #include <message_filters/time_sequencer.h>
 #include <message_filters/subscriber.h>
 #include <message_filters/cache.h>
-#include "ros/time.h"
+#include "path_follower/approx_marginals.h"
 #include "path_follower/SemCamera.h"
+#include "data_reader/DataReader.h"
 #include <iostream>
 #include <fstream>
 #include <string>
-#include "path_follower/approx_marginals.h"
 
 #include <sstream>
 
 #define BUFFER 100
+
+enum Mode { Simulation, Waypoints, Camera };
 
 geometry_msgs::Pose g_initial_pose;
 message_filters::Cache<geometry_msgs::PoseStamped> g_pose_cache(BUFFER);
 message_filters::Cache<path_follower::SemCamera> g_camera_cache(BUFFER);
 path_follower::SemCamera g_camera;
 static const int min_quality = 138; // max 425 
-
-
 
 /** Counts the number of occurences of a substring in a string.
     @param str String 
@@ -170,13 +171,15 @@ void usage(char *exec)
         //        std::cout << "Approximate inference algorithms  by A.Albore. Implementation of Libdai." << std::endl;
 #ifdef MANY_ALGORITMS
         std::cout << "Usage: " << exec << " <-w|-c> <file> [algorithm]" << std::endl;
-        std::cout << "-w : waypoint mode, specify waypoints file. (def. false)" << std::endl;
-        std::cout << "-c : camera mode, specify fg and algo files." << std::endl;
-        std::cout << "<file>: file of the waypoints or Factor Graph." << std::endl;
+        std::cout << "  -s : simulation mode. (default)" << std::endl;
+        std::cout << "  -w : waypoint mode, specify waypoints file." << std::endl;
+        std::cout << "  -c : camera mode, specify fg and algo files." << std::endl;
+        std::cout << "  <file>: file of the waypoints or Factor Graph." << std::endl;
         std::cout << "[algorithm]: algorithm used (def. bp)." << std::endl;
 #else
         std::cout << "Usage: " << exec << " <-w|-c> <filename>"  << std::endl; 
-        std::cout << "   -w : waypoint mode, specify waypoints file. (def. false)" << std::endl;
+        std::cout << "   -s : simulation mode. (default)" << std::endl;
+        std::cout << "   -w : waypoint mode, specify waypoints file. (default)" << std::endl;
         std::cout << "   -c : camera mode, specify .fg file." << std::endl;
         std::cout << "   <file>: file of the waypoints or Factor Graph." << std::endl;
 #endif
@@ -188,10 +191,12 @@ void usage(char *exec)
 /** 
     Calculates the trajectory based on an adaptive sampling algorithm.
     * The parameter k
-    @param a The algorithm to calculate the marginals, next sampling Pose and the Gibbs samples.
-    @return The number of waypoints visited.
+    @param a The algorithm to calculate the marginals, next sampling Pose and the Gibbs samples   
+    @param motion the publishing topic with the drone's movements
+    @param loop_rate ROS loop rate
+    @return The number of sampling points visited.
 */
-int adaptive_sampling(ApproxMarginals& a, ros::Publisher &motion, ros::Rate& loop_rate )
+int adaptive_sampling(ApproxMarginals& a, ros::Publisher &motion, ros::Rate& loop_rate)
 {
         /**
          * A count of how many messages we have sent. This is used to create
@@ -199,10 +204,11 @@ int adaptive_sampling(ApproxMarginals& a, ros::Publisher &motion, ros::Rate& loo
          */
         int count = 0;
         int timelimit = 50;
-        geometry_msgs::Pose msg = g_initial_pose; //NB: can pus as well an initial elevate position
+        geometry_msgs::Pose msg = g_initial_pose; //NB: can put as well an initial elevate position
+
         std_msgs::String semantic_camera;
 
-        // assert(!waypoints_mode);
+        assert(mode != Waypoints);
 
         ROS_INFO("Ready");
 
@@ -217,6 +223,7 @@ int adaptive_sampling(ApproxMarginals& a, ros::Publisher &motion, ros::Rate& loo
                 // AA: Here can initialize the FG with some samplings taken from file or from movements arount the initial position.
 
                 //        ROS_INFO("%s", msg.data.c_str());
+
                 /**
                  * The publish() function is how you send messages. The parameter
                  * is the message object. The type of this object must agree with the type
@@ -237,7 +244,6 @@ int adaptive_sampling(ApproxMarginals& a, ros::Publisher &motion, ros::Rate& loo
                 ros::spinOnce();
                 loop_rate.sleep();
 
-                // Using semantic camera
                 
                 //Get the time and store it in the time variable.
                 ros::Time time = ros::Time::now();
@@ -245,11 +251,11 @@ int adaptive_sampling(ApproxMarginals& a, ros::Publisher &motion, ros::Rate& loo
                 ros::Duration d = ros::Duration(3, 0);
                 d.sleep();
 
+
                 ROS_INFO("Camera output: %s", g_camera.data.data());
                 ROS_INFO("Camera output: %d", g_camera.num);
 
                 a.evidence(msg, g_camera.num);
-
                 cout << "Quality: " <<  a.quality() << " - Avg quality: " <<  a.quality()/a.fg().nrVars() << endl;
 
                 msg = a.next_waypoint();
@@ -260,8 +266,7 @@ int adaptive_sampling(ApproxMarginals& a, ros::Publisher &motion, ros::Rate& loo
                 // Finishing the path
                 if (a.quality() >= min_quality) //AA: and max_time?
                 {
-                        // a.print_Gibbs_sample(1000);
-                        a.print_max_state();
+                        a.print_Gibbs_sample(1000);
                         ROS_INFO("Moving toward: (%g, %g, %g)", 
                                  g_initial_pose.position.x, g_initial_pose.position.y, g_initial_pose.position.z);
                         motion.publish(g_initial_pose);
@@ -271,6 +276,91 @@ int adaptive_sampling(ApproxMarginals& a, ros::Publisher &motion, ros::Rate& loo
         }
         return count;
 }
+
+
+/** 
+    Calculates the trajectory based on an adaptive sampling algorithm.
+    * Uses the simulated mode: getting the occurence classes from data_reader
+    @param a The algorithm to calculate the marginals, next sampling Pose and the Gibbs samples.
+    @param loop_rate ROS loop rate
+    @param client the data_reader service's client
+    @return The number of sampling points visited.
+*/
+int adaptive_sampling_simulation(ApproxMarginals& a, ros::Rate& loop_rate, ros::ServiceClient& client)
+{
+        /**
+         * A count of how many messages we have sent. This is used to create
+         * a unique string for each message.
+         */
+        int count = 0;
+        int timelimit = 50;
+        geometry_msgs::Pose msg = g_initial_pose; //NB: can put as well an initial elevate position
+        assert(mode == Simulation);
+        
+        ROS_INFO("Ready");
+
+        while (ros::ok())
+        {
+                /* AA
+                 * here 1. gets the observation
+                 * 2. updates the FG
+                 * 3. gets the next waypoint and sets msg=next_waypoint()
+                 */
+                
+                // AA: Here can initialize the FG with some samplings taken from file or from movements arount the initial position.
+
+                //        ROS_INFO("%s", msg.data.c_str());
+
+                /**
+                 * The publish() function is how you send messages. The parameter
+                 * is the message object. The type of this object must agree with the type
+                 * given as a template parameter to the advertise<>() call, as was done
+                 * in the constructor above.
+                 */
+
+                ROS_INFO("From position: (%g, %g, %g)", msg.position.x, msg.position.y, msg.position.z, count);
+                ++count;
+                ros::spinOnce();
+                loop_rate.sleep();
+
+                
+                //Get the time and store it in the time variable.
+                ros::Time time = ros::Time::now();
+
+                data_reader::DataReader srv;
+                // geometry_msgs::Point coord;
+                // coord.x = msg.position.x;
+                // coord.y = msg.position.y;
+                srv.request.x = a.coord.pose2var(msg);
+                while (!client.call(srv))
+                {
+                        ROS_ERROR("Failed to call service data_reader at index: %ld",  (long int)srv.request.x);
+                        ROS_INFO("service is valid: %s",  client.isValid() ? "true" : "false");
+                        ros::spinOnce();
+                        loop_rate.sleep();                        
+                }
+                ROS_INFO("Output: %d", (int)srv.response.num);
+                        
+                a.evidence(msg, srv.response.num);
+        
+                cout << "Quality: " <<  a.quality() << " - Avg quality: " <<  a.quality()/a.fg().nrVars() << endl;
+
+                msg = a.next_waypoint();
+
+                /* Minimal quality for the reconstructed map. */
+                // const int min_quality = 138; // max 425 
+
+                // Finishing the path
+                if (a.quality() >= min_quality) //AA: and max_time?
+                {
+                        //a.print_Gibbs_sample(1000);
+                        a.print_max_state();
+                        break;
+                }
+        }
+        return count;
+}
+
 
 
 
@@ -336,13 +426,10 @@ int follow_waypoints(std::vector<geometry_msgs::Pose> &path, ros::Publisher &mot
 
 int main(int argc, char **argv)
 {
+        Mode mode;
+
         ros::init(argc, argv, "plan_node");
-        std::cout << argv[1] << std::endl;
-
-        // True if reading a file with the waypoints
-        bool waypoints_mode = false;
-
-
+        
         /* Reads Factor Graph from input file */
         FactorGraph network;
 
@@ -354,14 +441,16 @@ int main(int argc, char **argv)
         // Reads command line
         if (argc > 1)
         {
-                // First option should be -w or -c
+                // First option should be -w, -s or -c
                 if (argv[1] == std::string("-w"))
-                        waypoints_mode = true;
+                        mode = Waypoints;
                 else if  (argv[1] == std::string("-c"))
-                        ;
+                        mode = Camera;
+                else if  (argv[1] == std::string("-s"))
+                        mode = Simulation;
                 else  usage(argv[0]);
                 try {
-                        if (waypoints_mode)
+                        if (mode == Waypoints)
                                 read_path(argv[2], path);
                         else 
                                 network.ReadFromFile( argv[2] );
@@ -374,7 +463,6 @@ int main(int argc, char **argv)
         else
                 usage(argv[0]);
   
-
 /**
  * NodeHandle is the main access point to communications with the ROS system.
  * The first NodeHandle constructed will fully initialize this node, and the last
@@ -383,43 +471,64 @@ int main(int argc, char **argv)
         ros::NodeHandle n;
 
 /**
+ * ServiceClient is the client that sends requests to a service.
+ */
+        ros::ServiceClient client;
+/**
  * The advertise() function is how you tell ROS that you want to
  * publish on a given topic name.
  */
         ros::Publisher motion = n.advertise<geometry_msgs::Pose>("/bee/waypoint", 1000);
 
-        // subscribes to stream
-        ros::Subscriber sub = n.subscribe("/bee/pose", 1000, positionCallback);
-        ROS_INFO("subscribed to: %s", sub.getTopic().c_str() );
-        ros::Subscriber subC = n.subscribe("/bee/camera", 1000, cameraCallback);
+        if (mode == Simulation) {
+                client = n.serviceClient<data_reader::DataReader>("data_reader", true);
+                ROS_INFO("Created a client: %s", client.getService ().c_str() );
+        }
+        else {
+                // subscribes to stream
+                ros::Subscriber sub = n.subscribe("/bee/pose", 1000, positionCallback);
+                ROS_INFO("subscribed to: %s", sub.getTopic().c_str() );
+                ros::Subscriber subC = n.subscribe("/bee/camera", 1000, cameraCallback);
+        
+                // message_filters::Subscriber<std_msgs::String> subO(n, "/bee/camera", 1);
+                // message_filters::Cache<std_msgs::String> cache(subO, 100);
+                // message_filters::Subscriber<geometry_msgs::PoseStamped> sub(n, "/bee/pose", 1);
+                // g_pose_cache.connectInput(sub);
+                // g_pose_cache.registerCallback(boost::bind(&chatterCallback, _1));
+        }
 
-        // message_filters::Subscriber<std_msgs::String> subO(n, "/bee/camera", 1);
-        // message_filters::Cache<std_msgs::String> cache(subO, 100);
-        // message_filters::Subscriber<geometry_msgs::PoseStamped> sub(n, "/bee/pose", 1);
-        // g_pose_cache.connectInput(sub);
-        // g_pose_cache.registerCallback(boost::bind(&chatterCallback, _1));
         ros::Rate loop_rate(5);
 
         while (ros::ok())
         {
-                /* Gets the initial pose of the drone */
-                if (g_pose_cache.getElemAfterTime( g_pose_cache.getOldestTime() ) != NULL)
-                { 
-                        boost::shared_ptr<const geometry_msgs::PoseStamped> orig = g_pose_cache.getElemAfterTime( g_pose_cache.getOldestTime() );
-                        g_initial_pose = (orig->pose);
-                        ROS_INFO("Initial position: (%g, %g, %g)", g_initial_pose.position.x, g_initial_pose.position.y, g_initial_pose.position.z);
-                        break;
+                if (mode != Simulation)
+                {
+                        /* Gets the initial pose of the drone */
+                        if (g_pose_cache.getElemAfterTime( g_pose_cache.getOldestTime() ) != NULL)
+                        { 
+                                boost::shared_ptr<const geometry_msgs::PoseStamped> orig = g_pose_cache.getElemAfterTime( g_pose_cache.getOldestTime() );
+                                g_initial_pose = (orig->pose);
+                                ROS_INFO("Initial position: (%g, %g, %g)", g_initial_pose.position.x, g_initial_pose.position.y, g_initial_pose.position.z);
+                                break;
+                        }
+                        else  ROS_INFO("Error in identifying Initial position\n");
                 }
-                else  ROS_INFO("Error in identifying Initial position\n");
-                
+                else 
+                { //NB: Can be set differently
+                        g_initial_pose.position.x = 0.0;
+                        g_initial_pose.position.y = 0.0;
+                        g_initial_pose.position.z = 0.0;  
+                }
                 ros::spinOnce();
                 loop_rate.sleep();
+
+                if (mode == Simulation)
+                        break;
         }
 
 
-
         int steps = 0;
-        if (waypoints_mode)
+        if (mode == Waypoints)
         {
                 steps = follow_waypoints(path, motion, loop_rate);
                 path.erase(path.begin(), path.end());
@@ -438,7 +547,11 @@ int main(int argc, char **argv)
                 cout << marginals.fg().nrFactors() << " factors" << endl;
                 cout << marginals.num_classes() << " states" << endl;
 
-                steps = adaptive_sampling( marginals, motion, loop_rate );
+                if (mode == Camera)
+                        steps = adaptive_sampling( marginals, motion, loop_rate);
+                else
+                        steps = adaptive_sampling_simulation( marginals, loop_rate, client);
+
         }
 
         ROS_INFO("Algorithm terminated after %d steps.\n\n", steps); 
