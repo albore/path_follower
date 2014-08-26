@@ -53,34 +53,33 @@ const size_t max_iterations = 10000;
     Struct to hold the coordinates of the map.
  */
 typedef struct MapCoordinates {
-        const int xoff;
-        const int yoff;
-        const int col;
+        const int XOFF;
+        const int YOFF;
+        const int COL;
 
-        MapCoordinates(int a, int b, int c) : xoff(a), yoff(b), col(c) {}
+        MapCoordinates(int a, int b, int c) : XOFF(a), YOFF(b), COL(c) {}
 
         size_t pose2var(geometry_msgs::Pose p) 
         {
                 geometry_msgs::Point coord;
         
-                coord.x = p.position.x+xoff;
-                coord.y = p.position.y+yoff;
+                coord.x = p.position.x+XOFF;
+                coord.y = p.position.y+YOFF;
                 coord.z = p.position.z;
 
-                return (coord.x/3 + coord.y*col/3);
+                return (coord.x/3 + coord.y*COL/3);
         }
 
         geometry_msgs::Pose var2pose(int var)
         {
                 geometry_msgs::Pose p;
-                p.position.x = var%col*3-xoff;
-                p.position.y = var/col*3-yoff;
+                p.position.x = var%COL*3-XOFF;
+                p.position.y = var/COL*3-YOFF;
                 p.position.z = 4.9; // Safe value. 9m2 at f:50mm
 
                 return p;
         }
 } MapCoordinates;
-
 
 class ApproxMarginals {
 
@@ -97,13 +96,16 @@ public:
         void set_num_classes(const int c) { _num_classes = c; }
         int num_classes() { return _num_classes; }
         void print_max_state();
+        void print_quality_map();
         void print_Gibbs_sample(size_t n);
         FactorGraph& fg() { return _bp.fg();}
         BP& bp() { return _bp; } //NB: to change when using different algos
 
 protected:
+        std::vector<Real> quality_map();
         BP loopy_belief_propagation(FactorGraph &fg);
-        size_t most_uncertain_var();
-        void print_state(std::vector<size_t> &s,  std::ofstream &outfile);
+        size_t most_uncertain_var();                
+        template<typename T>
+                void print_state(std::vector<T> &s,  std::ofstream &outfile);
 };
 #endif // PATH_FOLLOWER_APPROX_MARGINALS_H

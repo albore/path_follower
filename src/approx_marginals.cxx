@@ -27,6 +27,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // #define MANY_ALGORITHMS
 // #define MAXPROD
+#include <ctime> 
 
 #include <math.h>
 #include "path_follower/approx_marginals.h"
@@ -120,6 +121,65 @@ Real ApproxMarginals::quality()
         return sum;
 }
 
+
+
+
+/**
+   Calculates the distribution of the quality of the graph.
+   @return A vector containing the pairs (observation/quality).
+*/
+std::vector<Real>  ApproxMarginals::quality_map()
+{
+        size_t  maxVars = fg().nrVars();
+        std::vector<Real> q_map( maxVars );
+
+        const clock_t begin_time = clock();
+
+       for( size_t i = 0; i < maxVars; ++i ) // iterate over all variables in network
+        {
+                Factor f = bp().belief( fg().var(i)); 
+                Real best_quality = 0.0;
+                // Gets the quality associated to the best observation
+                // iterates over all the possible observations
+
+                // Print FG here init
+                for  (size_t j = 0; j < f.nrStates(); ++j)
+                {                  
+                        bp().backupFactors( fg().delta(i) );      // Bp clone vs: factors to clamp
+                        fg().clamp(i, j);
+                        bp().init();
+                        try {
+                                bp().run();
+                        } catch( Exception &e ) {
+                                if( e.getCode() == Exception::NOT_NORMALIZABLE )
+                                {
+                                         bp().restoreFactors( fg().delta(i) );
+                                         std::cerr << "Error: Factor Graph non normalizable. Not initialized or empty matrix." << std::endl;
+                                         exit(0);
+                                }
+                                else
+                                        throw;
+                        }
+                        Real q = quality() ;
+                        if ( best_quality < q )
+                                best_quality = q;
+                        // Print FG here clamped
+
+
+                        // restore clamped factors
+                        bp().restoreFactors( fg().delta(i) );
+
+                // Print FG here restored
+
+                }
+                q_map[i] = best_quality; // AA: has to become a pair
+        } 
+// do something
+       std::cout << "Time for marginals: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC << std::endl;
+
+        return q_map;
+}
+
 /**
    Makes a newly created inference algorithm.
    @param fg The Factor Graph upon which is built the loopy belief propagation algorithm.
@@ -176,13 +236,14 @@ BP ApproxMarginals::loopy_belief_propagation(FactorGraph &fg)
    Prints out a single state (the probability distribution for a variable)
    @param s The state in the Markov field.
    @param outfile The output stream.
-*/
-void ApproxMarginals::print_state(std::vector<size_t> &s,  std::ofstream &outfile)
+*/ 
+template<typename T>
+void ApproxMarginals::print_state(std::vector<T>& s,  std::ofstream &outfile)
 {
         for( size_t i = 0; i < s.size(); i++ ) {
-                outfile << ((i == 0 || !((i)% coord.col) ) ? "" : "\t") << s[i];
+                outfile << ((i == 0 || !((i)% coord.COL) ) ? "" : "\t") << s[i];
                 
-                if ((i > 0) && !((i+1)%coord.col)) 
+                if ((i > 0) && !((i+1)%coord.COL)) 
                         outfile << std::endl;
         }
         outfile << std::endl;
@@ -212,7 +273,7 @@ void ApproxMarginals::print_Gibbs_sample(size_t nrIterations)
 // Write header (consisting of variable labels)
         for( size_t i = 0; i < fg().nrVars(); i++ ) {
                 outfile <<  "\t" << fg().var(i).label();
-                if ((i > 0) && !((i+1)%coord.col)) 
+                if ((i > 0) && !((i+1)%coord.COL)) 
                         outfile << std::endl;
         }
         outfile << std::endl << std::endl;
@@ -243,7 +304,7 @@ void ApproxMarginals::print_max_state()
 // Write header (consisting of variable labels)
         for( size_t i = 0; i < fg().nrVars(); i++ ) {
                 outfile <<  "\t" << fg().var(i).label();
-                if ((i > 0) && !((i+1)%coord.col)) 
+                if ((i > 0) && !((i+1)%coord.COL)) 
                         outfile << std::endl;
         }
         outfile << std::endl << std::endl;
@@ -252,12 +313,12 @@ void ApproxMarginals::print_max_state()
 // Draw max state from the factorgraph
 // and write them to the .tab file
         std::vector<size_t> state;
-        for( size_t i = 0; i < fg().nrVars(); ++i ) {
+        for( size_t i = 0, fgsize = fg().nrVars(); i < fgsize; ++i ) {
                 Factor f = bp().belief( fg().var(i));
                 Real higher_value = f.max();
                 // gets the max index
                 for (size_t j = 0; j < f.nrStates(); j++) 
-                        if  (higher_value == f[j])
+                        if  (higher_value == f[j]) // Greedy
                         {
                                 state.push_back(j);
                                 break;       
@@ -273,3 +334,18 @@ void ApproxMarginals::print_max_state()
 
 
 
+/**
+   Calculates the distribution of the quality of the graph.
+   @return A vector containing the pairs (observation/quality).
+*/
+void ApproxMarginals::print_quality_map()
+{
+         cout << "Quality map of the graph." << endl;
+        const std::vector<Real> q = quality_map();
+        for( size_t i = 0; i < q.size(); i++ ) {
+                cout << ((i == 0 || !((i)% coord.COL) ) ? "" : "\t") << q[i];
+                
+                if ((i > 0) && !((i+1)%coord.COL)) 
+                        cout << std::endl;
+        }
+}
