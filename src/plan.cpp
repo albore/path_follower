@@ -17,7 +17,7 @@
 
 #define BUFFER 100
 
-enum Mode { Simulation, Waypoints, Camera };
+enum Mode { Simulation, Waypoints, Camera, Planner };
 
 geometry_msgs::Pose g_initial_pose;
 message_filters::Cache<geometry_msgs::PoseStamped> g_pose_cache(BUFFER);
@@ -180,6 +180,8 @@ void usage(char *exec)
         std::cout << "Usage: " << exec << " <-w|-c> <filename>"  << std::endl; 
         std::cout << "   -s : simulation mode. (default)" << std::endl;
         std::cout << "   -w : waypoint mode, specify waypoints file. (default)" << std::endl;
+//        std::cout << "   -p : planner mode." << std::endl;
+
         std::cout << "   -c : camera mode, specify .fg file." << std::endl;
         std::cout << "   <file>: file of the waypoints or Factor Graph." << std::endl;
 #endif
@@ -551,13 +553,14 @@ int main(int argc, char **argv)
                 cout << marginals.fg().nrFactors() << " factors" << endl;
                 cout << marginals.num_classes() << " states" << endl;
 
+                // marginals.print_quality_map();
+                marginals.print_heatmap();
+
                 if (mode == Camera)
                         steps = adaptive_sampling( marginals, motion, loop_rate);
                 else
                         steps = adaptive_sampling_simulation( marginals, loop_rate, client);
-
         }
-
         ROS_INFO("Algorithm terminated after %d steps.\n\n", steps); 
         print_plan();
 

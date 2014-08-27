@@ -145,7 +145,7 @@ std::vector<Real>  ApproxMarginals::quality_map()
                 // Print FG here init
                 for  (size_t j = 0; j < f.nrStates(); ++j)
                 {                  
-                        bp().backupFactors( fg().delta(i) );      // Bp clone vs: factors to clamp
+                        bp().backupFactors( fg().var(i) );      // Bp clone vs: factors to clamp fg().delta(i)
                         fg().clamp(i, j);
                         bp().init();
                         try {
@@ -153,7 +153,7 @@ std::vector<Real>  ApproxMarginals::quality_map()
                         } catch( Exception &e ) {
                                 if( e.getCode() == Exception::NOT_NORMALIZABLE )
                                 {
-                                         bp().restoreFactors( fg().delta(i) );
+                                         bp().restoreFactors( fg().var(i) );
                                          std::cerr << "Error: Factor Graph non normalizable. Not initialized or empty matrix." << std::endl;
                                          exit(0);
                                 }
@@ -167,7 +167,7 @@ std::vector<Real>  ApproxMarginals::quality_map()
 
 
                         // restore clamped factors
-                        bp().restoreFactors( fg().delta(i) );
+                        bp().restoreFactors(fg().var(i));
 
                 // Print FG here restored
 
@@ -177,7 +177,7 @@ std::vector<Real>  ApproxMarginals::quality_map()
 // do something
        std::cout << "Time for marginals: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC << std::endl;
 
-        return q_map;
+       return q_map;
 }
 
 /**
@@ -348,4 +348,30 @@ void ApproxMarginals::print_quality_map()
                 if ((i > 0) && !((i+1)%coord.COL)) 
                         cout << std::endl;
         }
+}
+
+
+
+/**
+   Prints a list of coordinates an weigths for the (max) quality of the samples.
+   The output file is to be used with the heatmap tool at http://www.sethoscope.net/heatmap/
+   NB: Better having weigth between 0 and 1.
+   @return A vector containing the pairs (observation/quality).
+*/
+void ApproxMarginals::print_heatmap()
+{ 
+        std::ofstream outfile;
+        outfile.open( "heatmap.coords" );
+        if( !outfile.is_open() )
+                throw "Cannot write to file!";
+        cout << "Heat map of the graph quality." << endl;
+        const std::vector<Real> q = quality_map();
+        for( size_t i = 0; i < q.size(); i++ ) 
+        {
+                geometry_msgs::Point  p = coord.var2pose(i).position;               
+                outfile << p.x << " " << p.y << " " << q[i] << std::endl;;
+        }
+        outfile << std::endl;
+        outfile.close();
+        cout << "Heat map printed in hatmap.coords file." << endl;
 }

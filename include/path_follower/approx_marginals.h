@@ -96,6 +96,7 @@ public:
         void set_num_classes(const int c) { _num_classes = c; }
         int num_classes() { return _num_classes; }
         void print_max_state();
+        void print_heatmap();
         void print_quality_map();
         void print_Gibbs_sample(size_t n);
         FactorGraph& fg() { return _bp.fg();}
