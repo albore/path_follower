@@ -5,7 +5,11 @@ catkin_make --pkg path_follower
 
 to use (no install): 
 cp  /home/aalbore/catkin_ws/devel/lib/path_follower/path_node  /home/aalbore/catkin_ws/src/path_follower/
-rosrun path_follower path_node <waypoints file>
+
+examples of usage:
+rosrun path_follower plan_node -s 4-classes-factorgraph.fg
+rosrun path_follower path_node -w <waypoints file>
+
 
 to install (and then use)
 catkin_make install --pkg path_follower
